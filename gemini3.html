@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AR 地心透视仪</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        .info-panel {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 99; background: rgba(0, 0, 0, 0.7); color: white;
+            padding: 10px 15px; border-radius: 8px; font-family: sans-serif;
+            font-size: 14px; text-align: center;
+        }
+        #antipode-info {
+            position: fixed; top: 20px; right: 20px; z-index: 99;
+            background: rgba(0, 0, 0, 0.7); color: white;
+            padding: 10px 15px; border-radius: 8px; font-family: sans-serif;
+            font-size: 14px; display: none; /* 默认隐藏 */
+        }
+        /* 定义一个动画，让地球模型看起来更生动 */
+        @keyframes rotateEarth {
+            from { transform: rotateY(0deg); }
+            to { transform: rotateY(360deg); }
+        }
+        .rotating-earth { animation: rotateEarth 30s linear infinite; }
+    </style>
+</head>
+<body style="margin : 0px; overflow: hidden;">
+
+    <a-scene embedded arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+             vr-mode-ui="enabled: false">
+        
+        <a-marker type="pattern" url="https://raw.githubusercontent.com/AR-js-org/AR.js/master/aframe/examples/marker-training/examples/pattern-marker/pattern-marker.patt">
+            <a-entity id="earth-container" class="rotating-earth" position="0 0.5 0" scale="0.1 0.1 0.1"> 
+                <a-sphere src="https://cdn.jsdelivr.net/gh/hiiamrohit/aframe-asset-pack@master/assets/earth/earth-specular.jpg"
+                          radius="1"
+                          segments-width="64"
+                          segments-height="64"
+                          rotation="0 0 0">
+                </a-sphere>
+
+                <a-cylinder id="earth-hole" color="#0b0d17" radius="0.05" height="2" position="0 0 -0.5"></a-cylinder>
+
+                <a-box id="antipode-marker" color="red" width="0.02" height="0.02" depth="0.02" position="0 0 -1.5" visible="false"></a-box> 
+            </a-entity>
+        </a-marker>
+
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <div class="info-panel">
+        请用手机摄像头对准打印的 AR 识别图。<br>
+        点击屏幕，地球模型将出现并展示对跖点！
+    </div>
+    
+    <div id="antipode-info"></div>
+
+    <script>
+        const earthContainer = document.getElementById('earth-container');
+        const antipodeMarker = document.getElementById('antipode-marker');
+        const antipodeInfoPanel = document.getElementById('antipode-info');
+        let antipodeData = null; // 用于存储对跖点信息
+
+        // 当 AR 场景加载完成后，我们再添加事件监听
+        document.querySelector('a-scene').addEventListener('loaded', function () {
+            console.log("AR Scene Loaded");
+            
+            // 点击屏幕触发对跖点计算和显示
+            document.body.addEventListener('click', async function() {
+                // 模拟获取用户当前位置（实际应用会用 GPS 或更复杂的 AR定位）
+                // 这里我们简化，假定在上海
+                const currentCity = "Shanghai"; 
+
+                try {
+                    // 1. 获取起点坐标 (Nominatim API)
+                    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(currentCity)}`);
+                    const geoData = await geoRes.json();
+                    if (!geoData || geoData.length === 0) throw new Error("找不到起始城市");
+                    
+                    const startLat = parseFloat(geoData[0].lat);
+                    const startLon = parseFloat(geoData[0].lon);
+
+                    // 2. 计算对跖点坐标
+                    const antLat = -startLat;
+                    const antLon = startLon > 0 ? startLon - 180 : startLon + 180;
+
+                    // 3. 逆向地理编码查询对跖点城市
+                    const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${antLat}&lon=${antLon}&zoom=10&accept-language=zh`);
+                    const revData = await revRes.json();
+
+                    // 4. 更新 AR 模型和信息
+                    updateARAntipode(startLat, startLon, antLat, antLon, revData);
+
+                } catch (error) {
+                    console.error("AR Antipode Error:", error);
+                    alert("计算对跖点失败: " + error.message);
+                }
+            });
+        });
+
+        function updateARAntipode(startLat, startLon, antLat, antLon, revData) {
+            // 将经纬度转换为 A-Frame 的 3D 坐标
+            // 这是一个简化，需要更复杂的映射才能精确显示在地球模型上
+            // 假设地球半径为 1，我们用球坐标转换
+            
+            // 起点在地球模型上的位置（简化为固定点）
+            // 因为地球模型是自转的，这里位置固定在底部（相对于标记物）
+            // 你可以想象标记物就是我们站在地球模型上的位置
+            
+            // 对跖点在地球模型上的位置
+            // 如果起点是(0,0,0)，那对跖点就是(0,0, -2*radius)
+            // 我们的地球模型是0.1大小，所以半径是0.05
+            
+            // 由于地球是相对标记物固定位置的，我们直接把对跖点显示在地球模型的“另一端”即可
+            // 地球的中心在 (0, 0.5, 0)，半径 0.05
+            // 地球顶部在 (0, 1, 0), 底部在 (0, 0, 0)
+            // 所以对跖点应该在地球模型的正下方，或者说，中心点的“反方向”
+            
+            // 我们将对跖点方块放置在地球模型的正下方，模拟从下方“穿出”的效果
+            const earthRadius = 0.05; // 对应 scale="0.1 0.1 0.1" 的半径
+            antipodeMarker.setAttribute('position', `0 ${0.5 - earthRadius * 2} 0`); 
+            antipodeMarker.setAttribute('visible', true);
+            
+            // 更新信息面板
+            let antipodeName = (revData && revData.display_name) ? revData.display_name.split(',')[0] : '茫茫大海';
+            antipodeInfoPanel.innerHTML = `
+                起点: ${startLat.toFixed(2)}, ${startLon.toFixed(2)}<br>
+                对跖点: ${antipodeName} (${antLat.toFixed(2)}, ${antLon.toFixed(2)})
+            `;
+            antipodeInfoPanel.style.display = 'block';
+
+            // 增加地洞动画效果：让洞口更明显
+            document.getElementById('earth-hole').setAttribute('radius', '0.06'); // 洞口稍微扩大
+            setTimeout(() => {
+                document.getElementById('earth-hole').setAttribute('radius', '0.05'); // 恢复
+            }, 500);
+        }
+    </script>
+</body>
+</html>
